@@ -4,8 +4,8 @@ go 1.26.1
 
 require (
 	github.com/mark3labs/mcp-go v0.48.0
-	github.com/tickstem/cron v0.1.2
-	github.com/tickstem/verify v0.1.0
+	github.com/tickstem/cron v1.0.0
+	github.com/tickstem/verify v1.0.0
 )
 
 require (
