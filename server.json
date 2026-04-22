@@ -1,0 +1,11 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.tickstem/mcp",
+  "description": "Tickstem developer tools — manage cron jobs and verify emails from your AI coding assistant.",
+  "repository": {
+    "url": "https://github.com/tickstem/mcp",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": []
+}
