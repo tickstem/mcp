@@ -4,6 +4,8 @@
 
 MCP server for [Tickstem](https://tickstem.dev) — exposes cron job management and email verification as native tools for AI coding assistants (Claude, Cursor, Copilot, and any MCP-compatible agent).
 
+Pairs with the [Go SDK](https://github.com/tickstem/cron) and [Node.js SDK](https://github.com/tickstem/node) — let your AI assistant register jobs and verify emails while you write the app code.
+
 ## Install
 
 ```bash
