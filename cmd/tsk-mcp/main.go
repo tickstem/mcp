@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -31,6 +35,12 @@ func main() {
 	cronClient := cron.New(apiKey, cronOpts...)
 	verifyClient := verify.New(apiKey, verifyOpts...)
 
+	uptimeBaseURL := "https://api.tickstem.dev/v1"
+	if baseURL != "" {
+		uptimeBaseURL = baseURL
+	}
+	uptimeClient := newUptimeClient(apiKey, uptimeBaseURL)
+
 	s := server.NewMCPServer(
 		"tickstem",
 		"1.0.0",
@@ -39,6 +49,7 @@ func main() {
 
 	registerCronTools(s, cronClient)
 	registerVerifyTools(s, verifyClient)
+	registerUptimeTools(s, uptimeClient)
 
 	if err := server.ServeStdio(s); err != nil {
 		log.Fatalf("MCP server error: %v", err)
@@ -317,6 +328,194 @@ func makeListVerifyHistory(vc *verify.Client) server.ToolHandlerFunc {
 		}
 		return jsonResult(page)
 	}
+}
+
+// ── uptime tools ───────────────────────────────────────────────────────────────
+
+type uptimeClient struct {
+	apiKey  string
+	baseURL string
+	http    *http.Client
+}
+
+func newUptimeClient(apiKey, baseURL string) *uptimeClient {
+	return &uptimeClient{apiKey: apiKey, baseURL: baseURL, http: &http.Client{Timeout: 15 * time.Second}}
+}
+
+func (c *uptimeClient) do(ctx context.Context, method, path string, body any) ([]byte, error) {
+	var bodyReader io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		bodyReader = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "tickstem-mcp/1.0.0")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		var e struct{ Error string }
+		if json.Unmarshal(data, &e) == nil && e.Error != "" {
+			return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, e.Error)
+		}
+		return nil, fmt.Errorf("API error %d", resp.StatusCode)
+	}
+	return data, nil
+}
+
+func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
+	s.AddTool(mcp.NewTool("list_monitors",
+		mcp.WithDescription("List all uptime monitors in the account"),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		data, err := client.do(ctx, http.MethodGet, "/monitors", nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("create_monitor",
+		mcp.WithDescription("Create a new uptime monitor for an HTTP endpoint"),
+		mcp.WithString("name",
+			mcp.Required(),
+			mcp.Description("Human-readable label for the monitor"),
+		),
+		mcp.WithString("url",
+			mcp.Required(),
+			mcp.Description("HTTP or HTTPS URL to check"),
+		),
+		mcp.WithNumber("interval_secs",
+			mcp.Description("Check interval in seconds (60–86400, plan minimum applies)"),
+		),
+		mcp.WithNumber("timeout_secs",
+			mcp.Description("Request timeout in seconds (5–30, default 10)"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		body := map[string]any{
+			"name": mcp.ParseString(req, "name", ""),
+			"url":  mcp.ParseString(req, "url", ""),
+		}
+		if v := mcp.ParseInt(req, "interval_secs", 0); v > 0 {
+			body["interval_secs"] = v
+		}
+		if v := mcp.ParseInt(req, "timeout_secs", 0); v > 0 {
+			body["timeout_secs"] = v
+		}
+		data, err := client.do(ctx, http.MethodPost, "/monitors", body)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("get_monitor",
+		mcp.WithDescription("Get an uptime monitor by ID"),
+		mcp.WithString("monitor_id",
+			mcp.Required(),
+			mcp.Description("The monitor ID"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "monitor_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("monitor_id is required"), nil
+		}
+		data, err := client.do(ctx, http.MethodGet, "/monitors/"+id, nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("pause_monitor",
+		mcp.WithDescription("Pause an uptime monitor so it stops checking"),
+		mcp.WithString("monitor_id",
+			mcp.Required(),
+			mcp.Description("The monitor ID"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "monitor_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("monitor_id is required"), nil
+		}
+		data, err := client.do(ctx, http.MethodPatch, "/monitors/"+id, map[string]string{"status": "paused"})
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("resume_monitor",
+		mcp.WithDescription("Resume a paused uptime monitor"),
+		mcp.WithString("monitor_id",
+			mcp.Required(),
+			mcp.Description("The monitor ID"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "monitor_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("monitor_id is required"), nil
+		}
+		data, err := client.do(ctx, http.MethodPatch, "/monitors/"+id, map[string]string{"status": "active"})
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("delete_monitor",
+		mcp.WithDescription("Permanently delete an uptime monitor and its check history"),
+		mcp.WithString("monitor_id",
+			mcp.Required(),
+			mcp.Description("The monitor ID"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "monitor_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("monitor_id is required"), nil
+		}
+		if _, err := client.do(ctx, http.MethodDelete, "/monitors/"+id, nil); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(fmt.Sprintf("monitor %s deleted", id)), nil
+	})
+
+	s.AddTool(mcp.NewTool("list_monitor_checks",
+		mcp.WithDescription("List recent check results for an uptime monitor"),
+		mcp.WithString("monitor_id",
+			mcp.Required(),
+			mcp.Description("The monitor ID"),
+		),
+		mcp.WithNumber("limit",
+			mcp.Description("Number of results to return (1-100, default 50)"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "monitor_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("monitor_id is required"), nil
+		}
+		limit := mcp.ParseInt(req, "limit", 50)
+		data, err := client.do(ctx, http.MethodGet, fmt.Sprintf("/monitors/%s/checks?limit=%d", id, limit), nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
