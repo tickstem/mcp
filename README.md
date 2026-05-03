@@ -2,9 +2,9 @@
 
 [![Glama](https://glama.ai/mcp/servers/tickstem/mcp/badge)](https://glama.ai/mcp/servers/tickstem/mcp)
 
-MCP server for [Tickstem](https://tickstem.dev) — exposes cron job management and email verification as native tools for AI coding assistants (Claude, Cursor, Copilot, and any MCP-compatible agent).
+MCP server for [Tickstem](https://tickstem.dev) — exposes cron job scheduling, uptime monitoring, and email verification as native tools for AI coding assistants (Claude, Cursor, Copilot, and any MCP-compatible agent).
 
-Pairs with the [Go SDK](https://github.com/tickstem/cron) and [Node.js SDK](https://github.com/tickstem/node) — let your AI assistant register jobs and verify emails while you write the app code.
+Let your AI assistant register cron jobs, create uptime monitors with response assertions, verify email addresses, and query results — while you write the app code.
 
 ## Install
 
@@ -55,6 +55,36 @@ Add to your `~/.claude/claude_desktop_config.json` (or equivalent):
 | `delete_job` | Permanently delete a job and its execution history |
 | `list_executions` | List execution history for a job, most recent first |
 
+### Uptime monitoring
+
+| Tool | Description |
+|------|-------------|
+| `list_monitors` | List all monitors — status, URL, interval, SSL expiry, assertions |
+| `create_monitor` | Create a monitor with optional response assertions (status code, response time, body) |
+| `get_monitor` | Get a monitor by ID |
+| `pause_monitor` | Pause a monitor so it stops polling |
+| `resume_monitor` | Resume a paused monitor |
+| `delete_monitor` | Permanently delete a monitor and its check history |
+| `list_monitor_checks` | List recent checks — status, HTTP code, duration, error, SSL expiry |
+
+#### Response assertions
+
+`create_monitor` accepts an `assertions` parameter — a JSON array of conditions that must all pass for a check to be considered up. When assertions are set they replace the default 2xx/3xx logic.
+
+```json
+[
+  { "source": "status_code",   "comparison": "eq",       "target": "200"              },
+  { "source": "response_time", "comparison": "lt",       "target": "2000"             },
+  { "source": "body",          "comparison": "contains", "target": "\"status\":\"ok\"" }
+]
+```
+
+| Source | Valid comparisons | Target |
+|--------|------------------|--------|
+| `status_code` | `eq` `ne` `lt` `lte` `gt` `gte` | integer string |
+| `response_time` | `eq` `ne` `lt` `lte` `gt` `gte` | integer string (ms) |
+| `body` | `eq` `ne` `contains` `not_contains` | plain string |
+
 ### Email verification
 
 | Tool | Description |
@@ -77,11 +107,9 @@ export TICKSTEM_BASE_URL=http://localhost:8080/v1
 go run ./cmd/tsk-mcp
 ```
 
-Use [tsk-local](https://github.com/tickstem/cron) to run the Tickstem API locally.
-
 ## Get an API key
 
-[app.tickstem.dev](https://app.tickstem.dev) — free tier includes 1,000 cron executions and 500 email verifications per month.
+[app.tickstem.dev](https://app.tickstem.dev) — free tier includes 1,000 cron executions, 5 uptime monitors, and 500 email verifications per month.
 
 ## License
 

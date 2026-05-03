@@ -381,7 +381,7 @@ func (c *uptimeClient) do(ctx context.Context, method, path string, body any) ([
 
 func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 	s.AddTool(mcp.NewTool("list_monitors",
-		mcp.WithDescription("List all uptime monitors in the account"),
+		mcp.WithDescription("List all uptime monitors in the account. Returns each monitor's status (active/paused/failing), URL, check interval, SSL expiry date, and assertion rules."),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		data, err := client.do(ctx, http.MethodGet, "/monitors", nil)
 		if err != nil {
@@ -391,7 +391,12 @@ func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 	})
 
 	s.AddTool(mcp.NewTool("create_monitor",
-		mcp.WithDescription("Create a new uptime monitor for an HTTP endpoint"),
+		mcp.WithDescription("Create an uptime monitor that polls an HTTP/HTTPS endpoint on a schedule and alerts on failure. "+
+			"Supports response assertions to validate that the response is correct — not just that the server responded. "+
+			"Assertions use source (status_code, response_time, body) + comparison (eq, ne, lt, lte, gt, gte, contains, not_contains) + target. "+
+			"When assertions are set they replace the default 2xx/3xx success logic. "+
+			"For HTTPS endpoints, SSL certificate expiry is captured automatically and an alert is sent 30 days before expiry. "+
+			"Pass assertions as a JSON string, e.g.: [{\"source\":\"status_code\",\"comparison\":\"eq\",\"target\":\"200\"},{\"source\":\"body\",\"comparison\":\"contains\",\"target\":\"\\\"status\\\":\\\"ok\\\"\"}]"),
 		mcp.WithString("name",
 			mcp.Required(),
 			mcp.Description("Human-readable label for the monitor"),
@@ -401,10 +406,16 @@ func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 			mcp.Description("HTTP or HTTPS URL to check"),
 		),
 		mcp.WithNumber("interval_secs",
-			mcp.Description("Check interval in seconds (60–86400, plan minimum applies)"),
+			mcp.Description("Check interval in seconds (60–86400). Free plan minimum is 300s, paid plans 60s. Defaults to 60."),
 		),
 		mcp.WithNumber("timeout_secs",
 			mcp.Description("Request timeout in seconds (5–30, default 10)"),
+		),
+		mcp.WithString("assertions",
+			mcp.Description("Optional JSON array of assertion objects. Each must have source, comparison, and target fields. "+
+				"Sources: status_code, response_time, body. "+
+				"Numeric comparisons (status_code, response_time): eq, ne, lt, lte, gt, gte — target must be an integer string. "+
+				"Body comparisons: eq, ne, contains, not_contains — target is a plain string."),
 		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		body := map[string]any{
@@ -417,6 +428,13 @@ func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 		if v := mcp.ParseInt(req, "timeout_secs", 0); v > 0 {
 			body["timeout_secs"] = v
 		}
+		if raw := mcp.ParseString(req, "assertions", ""); raw != "" {
+			var assertions []map[string]string
+			if err := json.Unmarshal([]byte(raw), &assertions); err != nil {
+				return mcp.NewToolResultError("assertions must be a valid JSON array: " + err.Error()), nil
+			}
+			body["assertions"] = assertions
+		}
 		data, err := client.do(ctx, http.MethodPost, "/monitors", body)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
@@ -425,7 +443,7 @@ func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 	})
 
 	s.AddTool(mcp.NewTool("get_monitor",
-		mcp.WithDescription("Get an uptime monitor by ID"),
+		mcp.WithDescription("Get a single uptime monitor by ID. Returns current status, SSL expiry date, assertion rules, and next scheduled check time."),
 		mcp.WithString("monitor_id",
 			mcp.Required(),
 			mcp.Description("The monitor ID"),
@@ -443,7 +461,7 @@ func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 	})
 
 	s.AddTool(mcp.NewTool("pause_monitor",
-		mcp.WithDescription("Pause an uptime monitor so it stops checking"),
+		mcp.WithDescription("Pause an uptime monitor so it stops polling. No alerts will fire while paused. Use resume_monitor to restart."),
 		mcp.WithString("monitor_id",
 			mcp.Required(),
 			mcp.Description("The monitor ID"),
@@ -461,7 +479,7 @@ func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 	})
 
 	s.AddTool(mcp.NewTool("resume_monitor",
-		mcp.WithDescription("Resume a paused uptime monitor"),
+		mcp.WithDescription("Resume a paused uptime monitor. Polling and alerting restart immediately."),
 		mcp.WithString("monitor_id",
 			mcp.Required(),
 			mcp.Description("The monitor ID"),
@@ -479,7 +497,7 @@ func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 	})
 
 	s.AddTool(mcp.NewTool("delete_monitor",
-		mcp.WithDescription("Permanently delete an uptime monitor and its check history"),
+		mcp.WithDescription("Permanently delete an uptime monitor and all its check history. This cannot be undone."),
 		mcp.WithString("monitor_id",
 			mcp.Required(),
 			mcp.Description("The monitor ID"),
@@ -496,13 +514,15 @@ func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 	})
 
 	s.AddTool(mcp.NewTool("list_monitor_checks",
-		mcp.WithDescription("List recent check results for an uptime monitor"),
+		mcp.WithDescription("List recent check results for an uptime monitor, most recent first. "+
+			"Each check includes: status (up/down/timeout), HTTP status code, response time in ms, error message, SSL certificate expiry date, and timestamp. "+
+			"Use this to diagnose failures or verify that a monitor is healthy."),
 		mcp.WithString("monitor_id",
 			mcp.Required(),
 			mcp.Description("The monitor ID"),
 		),
 		mcp.WithNumber("limit",
-			mcp.Description("Number of results to return (1-100, default 50)"),
+			mcp.Description("Number of results to return (1–100, default 50)"),
 		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "monitor_id", "")
