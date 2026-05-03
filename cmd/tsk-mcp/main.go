@@ -35,11 +35,12 @@ func main() {
 	cronClient := cron.New(apiKey, cronOpts...)
 	verifyClient := verify.New(apiKey, verifyOpts...)
 
-	uptimeBaseURL := "https://api.tickstem.dev/v1"
+	apiBaseURL := "https://api.tickstem.dev/v1"
 	if baseURL != "" {
-		uptimeBaseURL = baseURL
+		apiBaseURL = baseURL
 	}
-	uptimeClient := newUptimeClient(apiKey, uptimeBaseURL)
+	uptimeClient := newUptimeClient(apiKey, apiBaseURL)
+	heartbeatClient := newUptimeClient(apiKey, apiBaseURL)
 
 	s := server.NewMCPServer(
 		"tickstem",
@@ -50,6 +51,7 @@ func main() {
 	registerCronTools(s, cronClient)
 	registerVerifyTools(s, verifyClient)
 	registerUptimeTools(s, uptimeClient)
+	registerHeartbeatTools(s, heartbeatClient)
 
 	if err := server.ServeStdio(s); err != nil {
 		log.Fatalf("MCP server error: %v", err)
@@ -531,6 +533,208 @@ func registerUptimeTools(s *server.MCPServer, client *uptimeClient) {
 		}
 		limit := mcp.ParseInt(req, "limit", 50)
 		data, err := client.do(ctx, http.MethodGet, fmt.Sprintf("/monitors/%s/checks?limit=%d", id, limit), nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+}
+
+// ── heartbeat tools ────────────────────────────────────────────────────────────
+
+func registerHeartbeatTools(s *server.MCPServer, client *uptimeClient) {
+	s.AddTool(mcp.NewTool("list_heartbeats",
+		mcp.WithDescription("List all heartbeat monitors in the account. Each heartbeat has a token used for pinging and a status: active, paused, or failing."),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		data, err := client.do(ctx, http.MethodGet, "/heartbeats", nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("create_heartbeat",
+		mcp.WithDescription("Create a heartbeat monitor (dead-man's switch). Your job should POST to the returned ping URL after each successful run. If the ping stops arriving within the interval + grace window, Tickstem sends an alert."),
+		mcp.WithString("name",
+			mcp.Required(),
+			mcp.Description("Human-readable label for the heartbeat"),
+		),
+		mcp.WithNumber("interval_secs",
+			mcp.Description("Expected ping interval in seconds (60–86400, default 3600)"),
+		),
+		mcp.WithNumber("grace_secs",
+			mcp.Description("Buffer after the deadline before alerting (0–86400, default 300)"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		body := map[string]any{
+			"name": mcp.ParseString(req, "name", ""),
+		}
+		if v := mcp.ParseInt(req, "interval_secs", 0); v > 0 {
+			body["interval_secs"] = v
+		}
+		if v := mcp.ParseInt(req, "grace_secs", 0); v > 0 {
+			body["grace_secs"] = v
+		}
+		data, err := client.do(ctx, http.MethodPost, "/heartbeats", body)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("get_heartbeat",
+		mcp.WithDescription("Get a single heartbeat monitor by ID. Returns its status, ping token, interval, grace window, and last pinged time."),
+		mcp.WithString("heartbeat_id",
+			mcp.Required(),
+			mcp.Description("The heartbeat ID"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "heartbeat_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("heartbeat_id is required"), nil
+		}
+		data, err := client.do(ctx, http.MethodGet, "/heartbeats/"+id, nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("update_heartbeat",
+		mcp.WithDescription("Update a heartbeat's name, interval, or grace window. Only provided fields are changed."),
+		mcp.WithString("heartbeat_id",
+			mcp.Required(),
+			mcp.Description("The heartbeat ID"),
+		),
+		mcp.WithString("name",
+			mcp.Description("New human-readable label"),
+		),
+		mcp.WithNumber("interval_secs",
+			mcp.Description("New expected ping interval in seconds (60–86400)"),
+		),
+		mcp.WithNumber("grace_secs",
+			mcp.Description("New grace window in seconds (0–86400)"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "heartbeat_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("heartbeat_id is required"), nil
+		}
+		body := map[string]any{}
+		if v := mcp.ParseString(req, "name", ""); v != "" {
+			body["name"] = v
+		}
+		if v := mcp.ParseInt(req, "interval_secs", 0); v > 0 {
+			body["interval_secs"] = v
+		}
+		if v := mcp.ParseInt(req, "grace_secs", 0); v >= 0 {
+			body["grace_secs"] = v
+		}
+		data, err := client.do(ctx, http.MethodPatch, "/heartbeats/"+id, body)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("pause_heartbeat",
+		mcp.WithDescription("Pause a heartbeat monitor. Alerts are suppressed while paused — useful during planned downtime or deployments."),
+		mcp.WithString("heartbeat_id",
+			mcp.Required(),
+			mcp.Description("The heartbeat ID"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "heartbeat_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("heartbeat_id is required"), nil
+		}
+		data, err := client.do(ctx, http.MethodPost, "/heartbeats/"+id+"/pause", nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("resume_heartbeat",
+		mcp.WithDescription("Resume a paused heartbeat monitor. Alerting restarts immediately."),
+		mcp.WithString("heartbeat_id",
+			mcp.Required(),
+			mcp.Description("The heartbeat ID"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "heartbeat_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("heartbeat_id is required"), nil
+		}
+		data, err := client.do(ctx, http.MethodPost, "/heartbeats/"+id+"/resume", nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("delete_heartbeat",
+		mcp.WithDescription("Permanently delete a heartbeat monitor and all its ping history. This cannot be undone."),
+		mcp.WithString("heartbeat_id",
+			mcp.Required(),
+			mcp.Description("The heartbeat ID"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "heartbeat_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("heartbeat_id is required"), nil
+		}
+		if _, err := client.do(ctx, http.MethodDelete, "/heartbeats/"+id, nil); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(fmt.Sprintf("heartbeat %s deleted", id)), nil
+	})
+
+	s.AddTool(mcp.NewTool("ping_heartbeat",
+		mcp.WithDescription("Ping a heartbeat to signal a successful job run. The token is the credential — no API key needed. Call this at the end of each successful execution."),
+		mcp.WithString("token",
+			mcp.Required(),
+			mcp.Description("The heartbeat ping token (returned when the heartbeat was created)"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		token := mcp.ParseString(req, "token", "")
+		if token == "" {
+			return mcp.NewToolResultError("token is required"), nil
+		}
+		pingURL := client.baseURL + "/heartbeats/" + token + "/ping"
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, pingURL, nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		httpReq.Header.Set("User-Agent", "tickstem-mcp/1.0.0")
+		resp, err := client.http.Do(httpReq)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 400 {
+			return mcp.NewToolResultError(fmt.Sprintf("API error %d: %s", resp.StatusCode, string(data))), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	s.AddTool(mcp.NewTool("list_heartbeat_pings",
+		mcp.WithDescription("List recent pings for a heartbeat monitor, most recent first."),
+		mcp.WithString("heartbeat_id",
+			mcp.Required(),
+			mcp.Description("The heartbeat ID"),
+		),
+		mcp.WithNumber("limit",
+			mcp.Description("Number of results to return (1–100, default 50)"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := mcp.ParseString(req, "heartbeat_id", "")
+		if id == "" {
+			return mcp.NewToolResultError("heartbeat_id is required"), nil
+		}
+		limit := mcp.ParseInt(req, "limit", 50)
+		data, err := client.do(ctx, http.MethodGet, fmt.Sprintf("/heartbeats/%s/pings?limit=%d", id, limit), nil)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

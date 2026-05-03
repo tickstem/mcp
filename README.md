@@ -2,9 +2,9 @@
 
 [![Glama](https://glama.ai/mcp/servers/tickstem/mcp/badge)](https://glama.ai/mcp/servers/tickstem/mcp)
 
-MCP server for [Tickstem](https://tickstem.dev) — exposes cron job scheduling, uptime monitoring, and email verification as native tools for AI coding assistants (Claude, Cursor, Copilot, and any MCP-compatible agent).
+MCP server for [Tickstem](https://tickstem.dev) — exposes cron job scheduling, uptime monitoring, heartbeat monitoring, and email verification as native tools for AI coding assistants (Claude, Cursor, Copilot, and any MCP-compatible agent).
 
-Let your AI assistant register cron jobs, create uptime monitors with response assertions, verify email addresses, and query results — while you write the app code.
+Let your AI assistant register cron jobs, create uptime monitors with response assertions, manage heartbeat monitors, verify email addresses, and query results — while you write the app code.
 
 ## Install
 
@@ -85,6 +85,20 @@ Add to your `~/.claude/claude_desktop_config.json` (or equivalent):
 | `response_time` | `eq` `ne` `lt` `lte` `gt` `gte` | integer string (ms) |
 | `body` | `eq` `ne` `contains` `not_contains` | plain string |
 
+### Heartbeat monitoring
+
+| Tool | Description |
+|------|-------------|
+| `list_heartbeats` | List all heartbeats — status, token, interval, grace window, last ping time |
+| `create_heartbeat` | Create a heartbeat monitor (dead-man's switch) |
+| `get_heartbeat` | Get a heartbeat by ID |
+| `update_heartbeat` | Update name, interval, or grace window |
+| `pause_heartbeat` | Suppress alerts during planned downtime |
+| `resume_heartbeat` | Resume alerting after a pause |
+| `delete_heartbeat` | Permanently delete a heartbeat and its ping history |
+| `ping_heartbeat` | Record a successful job run — no API key needed, token is the credential |
+| `list_heartbeat_pings` | List recent pings for a heartbeat, most recent first |
+
 ### Email verification
 
 | Tool | Description |
@@ -109,7 +123,7 @@ go run ./cmd/tsk-mcp
 
 ## Get an API key
 
-[app.tickstem.dev](https://app.tickstem.dev) — free tier includes 1,000 cron executions, 5 uptime monitors, and 500 email verifications per month.
+[app.tickstem.dev](https://app.tickstem.dev) — free tier includes 1,000 cron executions, 5 uptime monitors, 5 heartbeat monitors, and 500 email verifications per month.
 
 ## License
 
