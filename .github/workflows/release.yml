@@ -19,5 +19,24 @@ jobs:
           go-version-file: go.mod
 
       - uses: go-semantic-release/action@v1
+        id: semrel
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and upload binaries
+        if: steps.semrel.outputs.version != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="v${{ steps.semrel.outputs.version }}"
+          for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            GOOS=${platform%/*}
+            GOARCH=${platform#*/}
+            BIN="tsk-mcp-${GOOS}-${GOARCH}"
+            [ "$GOOS" = "windows" ] && BIN="${BIN}.exe"
+            GOOS=$GOOS GOARCH=$GOARCH go build \
+              -ldflags="-X main.Version=${VERSION}" \
+              -o "$BIN" \
+              ./cmd/tsk-mcp/
+            gh release upload "$VERSION" "$BIN"
+          done
