@@ -1,8 +1,9 @@
 name: Publish binaries
 
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -42,6 +43,16 @@ jobs:
             -o "${BIN}" \
             ./cmd/tsk-mcp/
           echo "BIN=${BIN}" >> $GITHUB_ENV
+
+      - name: Wait for release to exist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in $(seq 1 12); do
+            gh release view "${{ github.ref_name }}" && break
+            echo "waiting for release..."
+            sleep 10
+          done
 
       - name: Upload to release
         env:
