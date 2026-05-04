@@ -8,11 +8,29 @@ Let your AI assistant register cron jobs, create uptime monitors with response a
 
 ## Install
 
+**Download a pre-built binary** (no Go required):
+
+| Platform | Binary |
+|----------|--------|
+| macOS (Apple Silicon) | `tsk-mcp-darwin-arm64` |
+| macOS (Intel) | `tsk-mcp-darwin-amd64` |
+| Linux (x86-64) | `tsk-mcp-linux-amd64` |
+| Linux (ARM64) | `tsk-mcp-linux-arm64` |
+| Windows (x86-64) | `tsk-mcp-windows-amd64.exe` |
+
+Download from [Releases](https://github.com/tickstem/mcp/releases), make executable, and place on your `PATH`:
+
+```bash
+# macOS / Linux example
+chmod +x tsk-mcp-darwin-arm64
+mv tsk-mcp-darwin-arm64 /usr/local/bin/tsk-mcp
+```
+
+**Or install with Go:**
+
 ```bash
 go install github.com/tickstem/mcp/cmd/tsk-mcp@latest
 ```
-
-Or download a pre-built binary from [Releases](https://github.com/tickstem/mcp/releases).
 
 ## Quick start
 

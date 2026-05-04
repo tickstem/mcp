@@ -1,0 +1,49 @@
+name: Publish binaries
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          BIN=tsk-mcp-${{ matrix.goos }}-${{ matrix.goarch }}
+          [ "${{ matrix.goos }}" = "windows" ] && BIN="${BIN}.exe"
+          go build \
+            -ldflags="-X main.Version=${{ github.ref_name }}" \
+            -o "${BIN}" \
+            ./cmd/tsk-mcp/
+          echo "BIN=${BIN}" >> $GITHUB_ENV
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" "${BIN}" --clobber
