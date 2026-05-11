@@ -139,6 +139,21 @@ export TICKSTEM_BASE_URL=http://localhost:8080/v1
 go run ./cmd/tsk-mcp
 ```
 
+## SDKs
+
+The MCP server handles infrastructure management from your AI assistant. For application code, use the SDK that matches your language:
+
+| Language | Install | Docs |
+|----------|---------|------|
+| Python | `pip install tickstem` | [github.com/tickstem/python](https://github.com/tickstem/python) |
+| Go (cron) | `go get github.com/tickstem/cron` | [pkg.go.dev](https://pkg.go.dev/github.com/tickstem/cron) |
+| Go (uptime) | `go get github.com/tickstem/uptime` | [pkg.go.dev](https://pkg.go.dev/github.com/tickstem/uptime) |
+| Go (heartbeat) | `go get github.com/tickstem/heartbeat` | [pkg.go.dev](https://pkg.go.dev/github.com/tickstem/heartbeat) |
+| Go (verify) | `go get github.com/tickstem/verify` | [pkg.go.dev](https://pkg.go.dev/github.com/tickstem/verify) |
+| Node.js | `npm install @tickstem/cron` | [github.com/tickstem/node](https://github.com/tickstem/node) |
+
+All SDKs use the same API key.
+
 ## Get an API key
 
 [app.tickstem.dev](https://app.tickstem.dev) — free tier includes 1,000 cron executions, 5 uptime monitors, 5 heartbeat monitors, and 500 email verifications per month.
