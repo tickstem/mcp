@@ -1,6 +1,7 @@
 # tickstem/mcp
 
 [![Glama](https://glama.ai/mcp/servers/tickstem/mcp/badge)](https://glama.ai/mcp/servers/tickstem/mcp)
+[![smithery badge](https://smithery.ai/badge/tickstem-mcp--tickstem-info)](https://smithery.ai/servers/tickstem-info/tickstem-mcp)
 
 MCP server for [Tickstem](https://tickstem.dev) — exposes cron job scheduling, uptime monitoring, heartbeat monitoring, and email verification as native tools for AI coding assistants (Claude, Cursor, Copilot, and any MCP-compatible agent).
 
