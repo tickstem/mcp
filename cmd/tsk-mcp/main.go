@@ -89,21 +89,18 @@ func main() {
 	registerHeartbeatTools(s, apiBaseURL)
 
 	if httpPort := os.Getenv("MCP_HTTP_PORT"); httpPort != "" {
-		ctxFunc := func(ctx context.Context, r *http.Request) context.Context {
-			if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-				return context.WithValue(ctx, apiKeyContextKey, strings.TrimPrefix(auth, "Bearer "))
-			}
-			for _, param := range []string{"api_key", "TICKSTEM_API_KEY"} {
-				if key := r.URL.Query().Get(param); key != "" {
-					return context.WithValue(ctx, apiKeyContextKey, key)
+		httpServer := server.NewStreamableHTTPServer(s,
+			server.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
+				if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+					return context.WithValue(ctx, apiKeyContextKey, strings.TrimPrefix(auth, "Bearer "))
 				}
-			}
-			return ctx
-		}
-
-		sseServer := server.NewSSEServer(s,
-			server.WithBaseURL("https://mcp.tickstem.dev"),
-			server.WithSSEContextFunc(ctxFunc),
+				for _, param := range []string{"api_key", "TICKSTEM_API_KEY"} {
+					if key := r.URL.Query().Get(param); key != "" {
+						return context.WithValue(ctx, apiKeyContextKey, key)
+					}
+				}
+				return ctx
+			}),
 		)
 
 		mux := http.NewServeMux()
@@ -116,11 +113,11 @@ func main() {
   "description": "Cron scheduling, uptime monitoring, heartbeat monitoring, and email verification as native MCP tools",
   "vendor": "Tickstem",
   "version": "1.0.0",
-  "transport": [{"type": "sse", "url": "https://mcp.tickstem.dev/sse"}]
+  "transport": [{"type": "http", "url": "https://mcp.tickstem.dev/mcp"}]
 }`))
 		})
-		mux.Handle("/sse", sseServer.SSEHandler())
-		mux.Handle("/message", sseServer.MessageHandler())
+		mux.Handle("/mcp", httpServer)
+		mux.Handle("/mcp/", httpServer)
 
 		log.Printf("starting HTTP MCP server on :%s", httpPort)
 		if err := (&http.Server{Addr: ":" + httpPort, Handler: mux}).ListenAndServe(); err != nil {
