@@ -95,8 +95,10 @@ func main() {
 				if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 					return context.WithValue(ctx, apiKeyContextKey, strings.TrimPrefix(auth, "Bearer "))
 				}
-				if key := r.URL.Query().Get("api_key"); key != "" {
-					return context.WithValue(ctx, apiKeyContextKey, key)
+				for _, param := range []string{"api_key", "TICKSTEM_API_KEY"} {
+					if key := r.URL.Query().Get(param); key != "" {
+						return context.WithValue(ctx, apiKeyContextKey, key)
+					}
 				}
 				return ctx
 			}),
