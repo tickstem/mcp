@@ -142,7 +142,7 @@ func main() {
 func registerCronTools(s *server.MCPServer, baseURL string) {
 	s.AddTool(mcp.NewTool("list_jobs",
 		mcp.WithDescription("List all cron jobs in the account"),
-		mcp.WithOutputSchema[[]cron.Job](),
+		mcp.WithOutputSchema[JobList](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		jobs, err := c.List(ctx)
 		if err != nil {
@@ -274,7 +274,7 @@ func registerCronTools(s *server.MCPServer, baseURL string) {
 	s.AddTool(mcp.NewTool("list_executions",
 		mcp.WithDescription("List execution history for a cron job, most recent first"),
 		mcp.WithString("job_id", mcp.Required(), mcp.Description("The job ID")),
-		mcp.WithOutputSchema[[]cron.Execution](),
+		mcp.WithOutputSchema[ExecutionList](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		jobID := mcp.ParseString(req, "job_id", "")
 		if jobID == "" {

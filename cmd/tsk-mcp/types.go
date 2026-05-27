@@ -1,6 +1,20 @@
 package main
 
-import "time"
+import (
+	"time"
+
+	"github.com/tickstem/cron"
+)
+
+// JobList wraps a list of cron jobs.
+type JobList struct {
+	Jobs []cron.Job `json:"jobs"`
+}
+
+// ExecutionList wraps a list of cron executions.
+type ExecutionList struct {
+	Executions []cron.Execution `json:"executions"`
+}
 
 // DeletedResult is returned by tools that permanently remove a resource.
 type DeletedResult struct {
