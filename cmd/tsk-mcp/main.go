@@ -142,6 +142,7 @@ func main() {
 func registerCronTools(s *server.MCPServer, baseURL string) {
 	s.AddTool(mcp.NewTool("list_jobs",
 		mcp.WithDescription("List all cron jobs in the account"),
+		mcp.WithOutputSchema[[]cron.Job](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		jobs, err := c.List(ctx)
 		if err != nil {
@@ -153,6 +154,7 @@ func registerCronTools(s *server.MCPServer, baseURL string) {
 	s.AddTool(mcp.NewTool("get_job",
 		mcp.WithDescription("Get a cron job by ID"),
 		mcp.WithString("job_id", mcp.Required(), mcp.Description("The job ID")),
+		mcp.WithOutputSchema[cron.Job](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		jobID := mcp.ParseString(req, "job_id", "")
 		if jobID == "" {
@@ -173,6 +175,7 @@ func registerCronTools(s *server.MCPServer, baseURL string) {
 		mcp.WithString("method", mcp.Description("HTTP method (GET, POST, PUT, PATCH, DELETE). Defaults to POST")),
 		mcp.WithString("description", mcp.Description("Optional human-readable note")),
 		mcp.WithNumber("timeout_secs", mcp.Description("Request timeout in seconds (1-300). Defaults to 30")),
+		mcp.WithOutputSchema[cron.Job](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		job, err := c.Register(ctx, cron.RegisterParams{
 			Name:        mcp.ParseString(req, "name", ""),
@@ -197,6 +200,7 @@ func registerCronTools(s *server.MCPServer, baseURL string) {
 		mcp.WithString("method", mcp.Description("New HTTP method")),
 		mcp.WithString("description", mcp.Description("New description")),
 		mcp.WithNumber("timeout_secs", mcp.Description("New timeout in seconds")),
+		mcp.WithOutputSchema[cron.Job](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		jobID := mcp.ParseString(req, "job_id", "")
 		if jobID == "" {
@@ -223,6 +227,7 @@ func registerCronTools(s *server.MCPServer, baseURL string) {
 	s.AddTool(mcp.NewTool("pause_job",
 		mcp.WithDescription("Pause a cron job so it no longer fires"),
 		mcp.WithString("job_id", mcp.Required(), mcp.Description("The job ID")),
+		mcp.WithOutputSchema[cron.Job](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		jobID := mcp.ParseString(req, "job_id", "")
 		if jobID == "" {
@@ -238,6 +243,7 @@ func registerCronTools(s *server.MCPServer, baseURL string) {
 	s.AddTool(mcp.NewTool("resume_job",
 		mcp.WithDescription("Resume a paused or failing cron job"),
 		mcp.WithString("job_id", mcp.Required(), mcp.Description("The job ID")),
+		mcp.WithOutputSchema[cron.Job](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		jobID := mcp.ParseString(req, "job_id", "")
 		if jobID == "" {
@@ -253,6 +259,7 @@ func registerCronTools(s *server.MCPServer, baseURL string) {
 	s.AddTool(mcp.NewTool("delete_job",
 		mcp.WithDescription("Permanently delete a cron job and its execution history"),
 		mcp.WithString("job_id", mcp.Required(), mcp.Description("The job ID")),
+		mcp.WithOutputSchema[DeletedResult](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		jobID := mcp.ParseString(req, "job_id", "")
 		if jobID == "" {
@@ -261,12 +268,13 @@ func registerCronTools(s *server.MCPServer, baseURL string) {
 		if err := c.Delete(ctx, jobID); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return mcp.NewToolResultText(fmt.Sprintf("job %s deleted", jobID)), nil
+		return jsonResult(DeletedResult{Message: fmt.Sprintf("job %s deleted", jobID)})
 	}))
 
 	s.AddTool(mcp.NewTool("list_executions",
 		mcp.WithDescription("List execution history for a cron job, most recent first"),
 		mcp.WithString("job_id", mcp.Required(), mcp.Description("The job ID")),
+		mcp.WithOutputSchema[[]cron.Execution](),
 	), withCron(baseURL, func(ctx context.Context, c *cron.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		jobID := mcp.ParseString(req, "job_id", "")
 		if jobID == "" {
@@ -286,6 +294,7 @@ func registerVerifyTools(s *server.MCPServer, baseURL string) {
 	s.AddTool(mcp.NewTool("verify_email",
 		mcp.WithDescription("Verify an email address: checks syntax, MX records, disposable domain list, and role-based prefixes"),
 		mcp.WithString("email", mcp.Required(), mcp.Description("The email address to verify")),
+		mcp.WithOutputSchema[verify.Result](),
 	), withVerify(baseURL, func(ctx context.Context, c *verify.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		email := mcp.ParseString(req, "email", "")
 		if email == "" {
@@ -302,6 +311,7 @@ func registerVerifyTools(s *server.MCPServer, baseURL string) {
 		mcp.WithDescription("List past email verification results for the account"),
 		mcp.WithNumber("limit", mcp.Description("Number of results to return (1-100, default 20)")),
 		mcp.WithNumber("offset", mcp.Description("Offset for pagination")),
+		mcp.WithOutputSchema[verify.HistoryPage](),
 	), withVerify(baseURL, func(ctx context.Context, c *verify.Client, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		page, err := c.ListHistory(ctx, verify.ListHistoryParams{
 			Limit:  mcp.ParseInt(req, "limit", 20),
@@ -368,6 +378,7 @@ func (c *apiClient) do(ctx context.Context, method, path string, body any) ([]by
 func registerUptimeTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("list_monitors",
 		mcp.WithDescription("List all uptime monitors in the account. Returns each monitor's status (active/paused/failing), URL, check interval, SSL expiry date, and assertion rules."),
+		mcp.WithOutputSchema[MonitorList](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		data, err := c.do(ctx, http.MethodGet, "/monitors", nil)
 		if err != nil {
@@ -391,6 +402,7 @@ func registerUptimeTools(s *server.MCPServer, apiBaseURL string) {
 			"Sources: status_code, response_time, body. "+
 			"Numeric comparisons (status_code, response_time): eq, ne, lt, lte, gt, gte — target must be an integer string. "+
 			"Body comparisons: eq, ne, contains, not_contains — target is a plain string.")),
+		mcp.WithOutputSchema[Monitor](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		body := map[string]any{
 			"name": mcp.ParseString(req, "name", ""),
@@ -419,6 +431,7 @@ func registerUptimeTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("get_monitor",
 		mcp.WithDescription("Get a single uptime monitor by ID. Returns current status, SSL expiry date, assertion rules, and next scheduled check time."),
 		mcp.WithString("monitor_id", mcp.Required(), mcp.Description("The monitor ID")),
+		mcp.WithOutputSchema[Monitor](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "monitor_id", "")
 		if id == "" {
@@ -434,6 +447,7 @@ func registerUptimeTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("pause_monitor",
 		mcp.WithDescription("Pause an uptime monitor so it stops polling. No alerts will fire while paused. Use resume_monitor to restart."),
 		mcp.WithString("monitor_id", mcp.Required(), mcp.Description("The monitor ID")),
+		mcp.WithOutputSchema[Monitor](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "monitor_id", "")
 		if id == "" {
@@ -449,6 +463,7 @@ func registerUptimeTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("resume_monitor",
 		mcp.WithDescription("Resume a paused uptime monitor. Polling and alerting restart immediately."),
 		mcp.WithString("monitor_id", mcp.Required(), mcp.Description("The monitor ID")),
+		mcp.WithOutputSchema[Monitor](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "monitor_id", "")
 		if id == "" {
@@ -464,6 +479,7 @@ func registerUptimeTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("delete_monitor",
 		mcp.WithDescription("Permanently delete an uptime monitor and all its check history. This cannot be undone."),
 		mcp.WithString("monitor_id", mcp.Required(), mcp.Description("The monitor ID")),
+		mcp.WithOutputSchema[DeletedResult](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "monitor_id", "")
 		if id == "" {
@@ -472,7 +488,7 @@ func registerUptimeTools(s *server.MCPServer, apiBaseURL string) {
 		if _, err := c.do(ctx, http.MethodDelete, "/monitors/"+id, nil); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return mcp.NewToolResultText(fmt.Sprintf("monitor %s deleted", id)), nil
+		return jsonResult(DeletedResult{Message: fmt.Sprintf("monitor %s deleted", id)})
 	}))
 
 	s.AddTool(mcp.NewTool("list_monitor_checks",
@@ -481,6 +497,7 @@ func registerUptimeTools(s *server.MCPServer, apiBaseURL string) {
 			"Use this to diagnose failures or verify that a monitor is healthy."),
 		mcp.WithString("monitor_id", mcp.Required(), mcp.Description("The monitor ID")),
 		mcp.WithNumber("limit", mcp.Description("Number of results to return (1–100, default 50)")),
+		mcp.WithOutputSchema[MonitorCheckList](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "monitor_id", "")
 		if id == "" {
@@ -499,6 +516,7 @@ func registerUptimeTools(s *server.MCPServer, apiBaseURL string) {
 func registerHeartbeatTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("list_heartbeats",
 		mcp.WithDescription("List all heartbeat monitors in the account. Each heartbeat has a token used for pinging and a status: active, paused, or failing."),
+		mcp.WithOutputSchema[HeartbeatList](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		data, err := c.do(ctx, http.MethodGet, "/heartbeats", nil)
 		if err != nil {
@@ -512,6 +530,7 @@ func registerHeartbeatTools(s *server.MCPServer, apiBaseURL string) {
 		mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable label for the heartbeat")),
 		mcp.WithNumber("interval_secs", mcp.Description("Expected ping interval in seconds (60–86400, default 3600)")),
 		mcp.WithNumber("grace_secs", mcp.Description("Buffer after the deadline before alerting (0–86400, default 300)")),
+		mcp.WithOutputSchema[Heartbeat](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		body := map[string]any{"name": mcp.ParseString(req, "name", "")}
 		if v := mcp.ParseInt(req, "interval_secs", 0); v > 0 {
@@ -530,6 +549,7 @@ func registerHeartbeatTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("get_heartbeat",
 		mcp.WithDescription("Get a single heartbeat monitor by ID. Returns its status, ping token, interval, grace window, and last pinged time."),
 		mcp.WithString("heartbeat_id", mcp.Required(), mcp.Description("The heartbeat ID")),
+		mcp.WithOutputSchema[Heartbeat](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "heartbeat_id", "")
 		if id == "" {
@@ -548,6 +568,7 @@ func registerHeartbeatTools(s *server.MCPServer, apiBaseURL string) {
 		mcp.WithString("name", mcp.Description("New human-readable label")),
 		mcp.WithNumber("interval_secs", mcp.Description("New expected ping interval in seconds (60–86400)")),
 		mcp.WithNumber("grace_secs", mcp.Description("New grace window in seconds (0–86400)")),
+		mcp.WithOutputSchema[Heartbeat](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "heartbeat_id", "")
 		if id == "" {
@@ -573,6 +594,7 @@ func registerHeartbeatTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("pause_heartbeat",
 		mcp.WithDescription("Pause a heartbeat monitor. Alerts are suppressed while paused — useful during planned downtime or deployments."),
 		mcp.WithString("heartbeat_id", mcp.Required(), mcp.Description("The heartbeat ID")),
+		mcp.WithOutputSchema[Heartbeat](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "heartbeat_id", "")
 		if id == "" {
@@ -588,6 +610,7 @@ func registerHeartbeatTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("resume_heartbeat",
 		mcp.WithDescription("Resume a paused heartbeat monitor. Alerting restarts immediately."),
 		mcp.WithString("heartbeat_id", mcp.Required(), mcp.Description("The heartbeat ID")),
+		mcp.WithOutputSchema[Heartbeat](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "heartbeat_id", "")
 		if id == "" {
@@ -603,6 +626,7 @@ func registerHeartbeatTools(s *server.MCPServer, apiBaseURL string) {
 	s.AddTool(mcp.NewTool("delete_heartbeat",
 		mcp.WithDescription("Permanently delete a heartbeat monitor and all its ping history. This cannot be undone."),
 		mcp.WithString("heartbeat_id", mcp.Required(), mcp.Description("The heartbeat ID")),
+		mcp.WithOutputSchema[DeletedResult](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "heartbeat_id", "")
 		if id == "" {
@@ -611,12 +635,13 @@ func registerHeartbeatTools(s *server.MCPServer, apiBaseURL string) {
 		if _, err := c.do(ctx, http.MethodDelete, "/heartbeats/"+id, nil); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return mcp.NewToolResultText(fmt.Sprintf("heartbeat %s deleted", id)), nil
+		return jsonResult(DeletedResult{Message: fmt.Sprintf("heartbeat %s deleted", id)})
 	}))
 
 	s.AddTool(mcp.NewTool("ping_heartbeat",
 		mcp.WithDescription("Ping a heartbeat to signal a successful job run. The token is the credential — no API key needed. Call this at the end of each successful execution."),
 		mcp.WithString("token", mcp.Required(), mcp.Description("The heartbeat ping token (returned when the heartbeat was created)")),
+		mcp.WithOutputSchema[PingResult](),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		// ping uses token auth, not API key — no withAPI wrapper needed
 		token := mcp.ParseString(req, "token", "")
@@ -645,6 +670,7 @@ func registerHeartbeatTools(s *server.MCPServer, apiBaseURL string) {
 		mcp.WithDescription("List recent pings for a heartbeat monitor, most recent first."),
 		mcp.WithString("heartbeat_id", mcp.Required(), mcp.Description("The heartbeat ID")),
 		mcp.WithNumber("limit", mcp.Description("Number of results to return (1–100, default 50)")),
+		mcp.WithOutputSchema[HeartbeatPingList](),
 	), withAPI(apiBaseURL, func(ctx context.Context, c *apiClient, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id := mcp.ParseString(req, "heartbeat_id", "")
 		if id == "" {
