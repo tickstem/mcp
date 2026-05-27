@@ -89,22 +89,40 @@ func main() {
 	registerHeartbeatTools(s, apiBaseURL)
 
 	if httpPort := os.Getenv("MCP_HTTP_PORT"); httpPort != "" {
+		ctxFunc := func(ctx context.Context, r *http.Request) context.Context {
+			if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+				return context.WithValue(ctx, apiKeyContextKey, strings.TrimPrefix(auth, "Bearer "))
+			}
+			for _, param := range []string{"api_key", "TICKSTEM_API_KEY"} {
+				if key := r.URL.Query().Get(param); key != "" {
+					return context.WithValue(ctx, apiKeyContextKey, key)
+				}
+			}
+			return ctx
+		}
+
 		sseServer := server.NewSSEServer(s,
 			server.WithBaseURL("https://mcp.tickstem.dev"),
-			server.WithSSEContextFunc(func(ctx context.Context, r *http.Request) context.Context {
-				if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-					return context.WithValue(ctx, apiKeyContextKey, strings.TrimPrefix(auth, "Bearer "))
-				}
-				for _, param := range []string{"api_key", "TICKSTEM_API_KEY"} {
-					if key := r.URL.Query().Get(param); key != "" {
-						return context.WithValue(ctx, apiKeyContextKey, key)
-					}
-				}
-				return ctx
-			}),
+			server.WithSSEContextFunc(ctxFunc),
 		)
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/.well-known/mcp/server-card.json", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Write([]byte(`{
+  "schemaVersion": "1.0",
+  "name": "Tickstem",
+  "description": "Cron scheduling, uptime monitoring, heartbeat monitoring, and email verification as native MCP tools",
+  "vendor": "Tickstem",
+  "version": "1.0.0",
+  "transport": [{"type": "sse", "url": "https://mcp.tickstem.dev/sse"}]
+}`))
+		})
+		mux.Handle("/", sseServer)
+
 		log.Printf("starting HTTP MCP server on :%s", httpPort)
-		if err := sseServer.Start(":" + httpPort); err != nil {
+		if err := (&http.Server{Addr: ":" + httpPort, Handler: mux}).ListenAndServe(); err != nil {
 			log.Fatalf("HTTP MCP server error: %v", err)
 		}
 		return
