@@ -119,7 +119,8 @@ func main() {
   "transport": [{"type": "sse", "url": "https://mcp.tickstem.dev/sse"}]
 }`))
 		})
-		mux.Handle("/", sseServer)
+		mux.Handle("/sse", sseServer.SSEHandler())
+		mux.Handle("/message", sseServer.MessageHandler())
 
 		log.Printf("starting HTTP MCP server on :%s", httpPort)
 		if err := (&http.Server{Addr: ":" + httpPort, Handler: mux}).ListenAndServe(); err != nil {
