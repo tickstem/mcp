@@ -90,6 +90,7 @@ func main() {
 
 	if httpPort := os.Getenv("MCP_HTTP_PORT"); httpPort != "" {
 		httpServer := server.NewStreamableHTTPServer(s,
+			server.WithStateLess(true),
 			server.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
 				if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 					return context.WithValue(ctx, apiKeyContextKey, strings.TrimPrefix(auth, "Bearer "))
