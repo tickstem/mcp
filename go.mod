@@ -3,7 +3,7 @@ module github.com/tickstem/mcp
 go 1.26.1
 
 require (
-	github.com/mark3labs/mcp-go v0.54.1
+	github.com/mark3labs/mcp-go v0.55.1
 	github.com/tickstem/cron v1.0.1
 	github.com/tickstem/verify v1.0.0
 )
